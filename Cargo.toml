@@ -1,0 +1,20 @@
+[package]
+name = "andriud22"
+version = "0.1.3"
+authors = ["Kirill Chibisov <contact@kchibisov.com>"]
+description = "Examples for glutin"
+repository = "https://github.com/rust-windowing/glutin"
+license = "Apache-2.0"
+rust-version = "1.70.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+glutin_examples = { git = "https://github.com/rust-windowing/glutin" }
+winit = { version = "0.30.0", default-features = false, features = ["android-native-activity", "rwh_06"] }
+
+[build-dependencies]
+cfg_aliases = "0.2.1"
+
+[lib]
+crate-type = ["cdylib"]
