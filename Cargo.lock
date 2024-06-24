@@ -38,15 +38,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "andriud22"
-version = "0.1.3"
-dependencies = [
- "cfg_aliases",
- "glutin_examples",
- "winit",
-]
-
-[[package]]
 name = "android-activity"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -408,6 +399,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "glit"
+version = "0.1.3"
+dependencies = [
+ "gl_generator",
+ "glutin",
+ "glutin-winit",
+ "png",
+ "raw-window-handle",
+ "winit",
+]
+
+[[package]]
 name = "glutin"
 version = "0.32.0"
 source = "git+https://github.com/rust-windowing/glutin#3296c9af3e9db47e72429698a8a2534898160945"
@@ -449,20 +452,6 @@ source = "git+https://github.com/rust-windowing/glutin#3296c9af3e9db47e72429698a
 dependencies = [
  "gl_generator",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "glutin_examples"
-version = "0.1.3"
-source = "git+https://github.com/rust-windowing/glutin#3296c9af3e9db47e72429698a8a2534898160945"
-dependencies = [
- "cfg_aliases",
- "gl_generator",
- "glutin",
- "glutin-winit",
- "png",
- "raw-window-handle",
- "winit",
 ]
 
 [[package]]

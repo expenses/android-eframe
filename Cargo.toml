@@ -1,5 +1,5 @@
 [package]
-name = "andriud22"
+name = "glit"
 version = "0.1.3"
 authors = ["Kirill Chibisov <contact@kchibisov.com>"]
 description = "Examples for glutin"
@@ -9,12 +9,23 @@ rust-version = "1.70.0"
 edition = "2021"
 publish = false
 
+[features]
+default = ["egl", "glx", "x11", "wayland", "wgl"]
+egl = ["glutin-winit/egl", "png"]
+glx = ["glutin-winit/glx"]
+wgl = ["glutin-winit/wgl"]
+x11 = ["glutin-winit/x11"]
+wayland = ["glutin-winit/wayland", "winit/wayland-dlopen", "winit/wayland-csd-adwaita"]
+
 [dependencies]
-glutin_examples = { git = "https://github.com/rust-windowing/glutin" }
-winit = { version = "0.30.0", default-features = false, features = ["android-native-activity", "rwh_06"] }
+glutin = { git = "https://github.com/rust-windowing/glutin", default-features = false }
+glutin-winit = { git = "https://github.com/rust-windowing/glutin", default-features = false }
+png = { version = "0.17.6", optional = true }
+raw-window-handle = "0.6"
+winit = { version = "0.30.0", default-features = false, features = ["rwh_06", "android-native-activity"] }
 
 [build-dependencies]
-cfg_aliases = "0.2.1"
+gl_generator = "0.14"
 
 [lib]
 crate-type = ["cdylib"]
