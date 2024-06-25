@@ -151,6 +151,12 @@
 
             signed-apk = sign-apk { apk = "${aligned-apk}/aligned.apk"; };
 
+            run = pkgs.writeShellScriptBin "run" ''
+              adb install ${x86_64-apk}/signed.apk
+              adb shell am start -a android.intent.action.MAIN -n "rust.glit/android.app.NativeActivity"
+              adb logcat RustStdoutStderr:V glit:D '*:S'
+            '';
+
             cargo-apk-build = crane-lib.buildPackage {
               inherit src;
               doCheck = false;
