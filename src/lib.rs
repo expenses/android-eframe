@@ -8,12 +8,11 @@ fn android_main(app: winit::platform::android::activity::AndroidApp) {
 }
 
 mod glutin_examples {
+    use glow::HasContext;
     use std::error::Error;
-    use std::ffi::{CStr, CString};
     use std::num::NonZeroU32;
-    use std::ops::Deref;
+    use std::sync::Arc;
 
-    use gl::types::GLfloat;
     use raw_window_handle::HasWindowHandle;
     use winit::application::ApplicationHandler;
     use winit::event::{KeyEvent, WindowEvent};
@@ -30,11 +29,14 @@ mod glutin_examples {
 
     use glutin_winit::{DisplayBuilder, GlWindow};
 
-    pub mod gl {
-        #![allow(clippy::all)]
-        include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
-
-        pub use Gles2 as Gl;
+    struct App {
+        template: ConfigTemplateBuilder,
+        display_builder: DisplayBuilder,
+        exit_state: Result<(), Box<dyn Error>>,
+        not_current_gl_context: Option<NotCurrentContext>,
+        renderer: Option<Renderer>,
+        // NOTE: `AppState` carries the `Window`, thus it should be dropped after everything else.
+        state: Option<AppState>,
     }
 
     pub fn main(event_loop: winit::event_loop::EventLoop<()>) -> Result<(), Box<dyn Error>> {
@@ -56,7 +58,14 @@ mod glutin_examples {
 
         let display_builder = DisplayBuilder::new().with_window_attributes(Some(window_attributes));
 
-        let mut app = App::new(template, display_builder);
+        let mut app = App {
+            template,
+            display_builder,
+            exit_state: Ok(()),
+            not_current_gl_context: None,
+            state: None,
+            renderer: None,
+        };
         event_loop.run_app(&mut app)?;
 
         app.exit_state
@@ -148,7 +157,7 @@ mod glutin_examples {
             // buffers. It also performs function loading, which needs a current context on
             // WGL.
             self.renderer
-                .get_or_insert_with(|| Renderer::new(&gl_display));
+                .get_or_insert_with(|| Renderer::new(&gl_display, &event_loop));
 
             // Try setting vsync.
             if let Err(res) = gl_surface
@@ -187,6 +196,12 @@ mod glutin_examples {
             _window_id: winit::window::WindowId,
             event: WindowEvent,
         ) {
+            if let (Some(renderer), Some(AppState { window, .. })) =
+                (self.renderer.as_mut(), self.state.as_ref())
+            {
+                renderer.egui_glow.on_window_event(&window, &event);
+            }
+
             match event {
                 WindowEvent::Resized(size) if size.width != 0 && size.height != 0 => {
                     // Some platforms like EGL require resizing GL surface to update the size
@@ -228,34 +243,12 @@ mod glutin_examples {
                 window,
             }) = self.state.as_ref()
             {
-                let renderer = self.renderer.as_ref().unwrap();
-                renderer.draw();
+                let renderer = self.renderer.as_mut().unwrap();
+                renderer.draw(&window);
+
                 window.request_redraw();
 
                 gl_surface.swap_buffers(gl_context).unwrap();
-            }
-        }
-    }
-
-    struct App {
-        template: ConfigTemplateBuilder,
-        display_builder: DisplayBuilder,
-        exit_state: Result<(), Box<dyn Error>>,
-        not_current_gl_context: Option<NotCurrentContext>,
-        renderer: Option<Renderer>,
-        // NOTE: `AppState` carries the `Window`, thus it should be dropped after everything else.
-        state: Option<AppState>,
-    }
-
-    impl App {
-        fn new(template: ConfigTemplateBuilder, display_builder: DisplayBuilder) -> Self {
-            Self {
-                template,
-                display_builder,
-                exit_state: Ok(()),
-                not_current_gl_context: None,
-                state: None,
-                renderer: None,
             }
         }
     }
@@ -286,192 +279,50 @@ mod glutin_examples {
     }
 
     pub struct Renderer {
-        program: gl::types::GLuint,
-        vao: gl::types::GLuint,
-        vbo: gl::types::GLuint,
-        gl: gl::Gl,
+        gl: Arc<glow::Context>,
+        egui_glow: egui_glow::EguiGlow,
+        demo_windows: egui_demo_lib::DemoWindows,
     }
 
     impl Renderer {
-        pub fn new<D: GlDisplay>(gl_display: &D) -> Self {
+        pub fn new<D: GlDisplay>(
+            gl_display: &D,
+            event_loop: &winit::event_loop::ActiveEventLoop,
+        ) -> Self {
             unsafe {
-                let gl = gl::Gl::load_with(|symbol| {
-                    let symbol = CString::new(symbol).unwrap();
-                    gl_display.get_proc_address(symbol.as_c_str()).cast()
-                });
+                let gl = Arc::new(glow::Context::from_loader_function_cstr(|s| {
+                    gl_display.get_proc_address(s)
+                }));
 
-                if let Some(renderer) = get_gl_string(&gl, gl::RENDERER) {
-                    println!("Running on {}", renderer.to_string_lossy());
-                }
-                if let Some(version) = get_gl_string(&gl, gl::VERSION) {
-                    println!("OpenGL Version {}", version.to_string_lossy());
-                }
-
-                if let Some(shaders_version) = get_gl_string(&gl, gl::SHADING_LANGUAGE_VERSION) {
-                    println!("Shaders version on {}", shaders_version.to_string_lossy());
-                }
-
-                let vertex_shader = create_shader(&gl, gl::VERTEX_SHADER, VERTEX_SHADER_SOURCE);
-                let fragment_shader =
-                    create_shader(&gl, gl::FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE);
-
-                let program = gl.CreateProgram();
-
-                gl.AttachShader(program, vertex_shader);
-                gl.AttachShader(program, fragment_shader);
-
-                gl.LinkProgram(program);
-
-                gl.UseProgram(program);
-
-                gl.DeleteShader(vertex_shader);
-                gl.DeleteShader(fragment_shader);
-
-                let mut vao = std::mem::zeroed();
-                gl.GenVertexArrays(1, &mut vao);
-                gl.BindVertexArray(vao);
-
-                let mut vbo = std::mem::zeroed();
-                gl.GenBuffers(1, &mut vbo);
-                gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
-                gl.BufferData(
-                    gl::ARRAY_BUFFER,
-                    (VERTEX_DATA.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,
-                    VERTEX_DATA.as_ptr() as *const _,
-                    gl::STATIC_DRAW,
-                );
-
-                let pos_attrib = gl.GetAttribLocation(program, b"position\0".as_ptr() as *const _);
-                let color_attrib = gl.GetAttribLocation(program, b"color\0".as_ptr() as *const _);
-                gl.VertexAttribPointer(
-                    pos_attrib as gl::types::GLuint,
-                    2,
-                    gl::FLOAT,
-                    0,
-                    5 * std::mem::size_of::<f32>() as gl::types::GLsizei,
-                    std::ptr::null(),
-                );
-                gl.VertexAttribPointer(
-                    color_attrib as gl::types::GLuint,
-                    3,
-                    gl::FLOAT,
-                    0,
-                    5 * std::mem::size_of::<f32>() as gl::types::GLsizei,
-                    (2 * std::mem::size_of::<f32>()) as *const () as *const _,
-                );
-                gl.EnableVertexAttribArray(pos_attrib as gl::types::GLuint);
-                gl.EnableVertexAttribArray(color_attrib as gl::types::GLuint);
+                let egui_glow = egui_glow::EguiGlow::new(event_loop, gl.clone(), None, None);
 
                 Self {
-                    program,
-                    vao,
-                    vbo,
                     gl,
+                    egui_glow,
+                    demo_windows: Default::default(),
                 }
             }
         }
 
-        pub fn draw(&self) {
-            self.draw_with_clear_color(0.1, 0.1, 0.1, 0.9)
+        pub fn draw(&mut self, window: &Window) {
+            //self.draw_with_clear_color(0.5, 0.1, 0.1, 0.9);
+            self.egui_glow.run(&window, |mut egui_ctx| {
+                self.demo_windows.ui(&mut egui_ctx);
+            });
+            self.egui_glow.paint(window);
         }
 
-        pub fn draw_with_clear_color(
-            &self,
-            red: GLfloat,
-            green: GLfloat,
-            blue: GLfloat,
-            alpha: GLfloat,
-        ) {
+        pub fn draw_with_clear_color(&self, red: f32, green: f32, blue: f32, alpha: f32) {
             unsafe {
-                self.gl.UseProgram(self.program);
-
-                self.gl.BindVertexArray(self.vao);
-                self.gl.BindBuffer(gl::ARRAY_BUFFER, self.vbo);
-
-                self.gl.ClearColor(red, green, blue, alpha);
-                self.gl.Clear(gl::COLOR_BUFFER_BIT);
-                self.gl.DrawArrays(gl::TRIANGLES, 0, 3);
+                self.gl.clear_color(red, green, blue, alpha);
+                self.gl.clear(glow::COLOR_BUFFER_BIT);
             }
         }
 
         pub fn resize(&self, width: i32, height: i32) {
             unsafe {
-                self.gl.Viewport(0, 0, width, height);
+                self.gl.viewport(0, 0, width, height);
             }
         }
     }
-
-    impl Deref for Renderer {
-        type Target = gl::Gl;
-
-        fn deref(&self) -> &Self::Target {
-            &self.gl
-        }
-    }
-
-    impl Drop for Renderer {
-        fn drop(&mut self) {
-            unsafe {
-                self.gl.DeleteProgram(self.program);
-                self.gl.DeleteBuffers(1, &self.vbo);
-                self.gl.DeleteVertexArrays(1, &self.vao);
-            }
-        }
-    }
-
-    unsafe fn create_shader(
-        gl: &gl::Gl,
-        shader: gl::types::GLenum,
-        source: &[u8],
-    ) -> gl::types::GLuint {
-        let shader = gl.CreateShader(shader);
-        gl.ShaderSource(
-            shader,
-            1,
-            [source.as_ptr().cast()].as_ptr(),
-            std::ptr::null(),
-        );
-        gl.CompileShader(shader);
-        shader
-    }
-
-    fn get_gl_string(gl: &gl::Gl, variant: gl::types::GLenum) -> Option<&'static CStr> {
-        unsafe {
-            let s = gl.GetString(variant);
-            (!s.is_null()).then(|| CStr::from_ptr(s.cast()))
-        }
-    }
-
-    #[rustfmt::skip]
-static VERTEX_DATA: [f32; 15] = [
-    -0.5, -0.5,  1.0,  0.0,  0.0,
-     0.0,  0.5,  1.0,  0.0,  0.0,
-     0.5, -0.5,  1.0,  0.0,  0.0,
-];
-
-    const VERTEX_SHADER_SOURCE: &[u8] = b"
-#version 100
-precision mediump float;
-
-attribute vec2 position;
-attribute vec3 color;
-
-varying vec3 v_color;
-
-void main() {
-    gl_Position = vec4(position, 0.0, 1.0);
-    v_color = color;
-}
-\0";
-
-    const FRAGMENT_SHADER_SOURCE: &[u8] = b"
-#version 100
-precision mediump float;
-
-varying vec3 v_color;
-
-void main() {
-    gl_FragColor = vec4(v_color, 1.0);
-}
-\0";
 }

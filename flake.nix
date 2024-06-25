@@ -87,7 +87,7 @@
           inherit build-tools generate-manifest;
           inherit (android-nixpkgs.packages.${system}) platforms-android-30;
         };
-        debug-keystore = gen-debug-keystore {};
+        debug-keystore = gen-debug-keystore { };
 
         env-vars-for =
           target:
@@ -124,14 +124,17 @@
       {
         devShells.default =
           with pkgs;
-          mkShell {
-            CARGO_HOME = (crane-lib.vendorCargoDeps { src = ./.; });
-            nativeBuildInputs = [
-              rust-toolchain
-              cargo-apk-patched
-            ];
-            inherit (environment) ANDROID_HOME NDK_HOME;
-          };
+          mkShell (
+            {
+              nativeBuildInputs = [
+                rust-toolchain
+                cargo-apk-patched
+                cargo-bloat
+              ];
+              inherit (environment) ANDROID_HOME NDK_HOME;
+            }
+            // env-vars-for "x86_64-linux-android"
+          );
         packages = (
           rec {
 
@@ -139,9 +142,14 @@
 
             manifest = generate-manifest { inherit src; };
 
-            x86_64-apk = sign-apk { apk =
-              "${align-apk "${create-apk {
-                inherit src; libraries = {inherit (libraries) x86_64;};}
+            x86_64-apk = sign-apk {
+              apk = "${align-apk "${
+                create-apk {
+                  inherit src;
+                  libraries = {
+                    inherit (libraries) x86_64;
+                  };
+                }
               }/apk.apk"}/aligned.apk";
             };
 

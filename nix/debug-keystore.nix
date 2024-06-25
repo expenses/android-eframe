@@ -1,9 +1,6 @@
+{ runCommand, openjdk }:
 {
-  runCommand,
-  openjdk
-}:
-{
-  passwd ? "android"
+  passwd ? "android",
 }:
 runCommand "debug.keystore" { } ''
   mkdir $out
