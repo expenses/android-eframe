@@ -52,7 +52,7 @@
         };
 
         rust-targets = {
-          "aarch64" = "aarch64-linux-android";
+          "arm64-v8a" = "aarch64-linux-android";
           "armv7" = "armv7-linux-androideabi";
           "i686" = "i686-linux-android";
           "x86_64" = "x86_64-linux-android";
@@ -79,14 +79,15 @@
 
         src = crane-lib.cleanCargoSource ./.;
 
-        debug-keystore = pkgs.callPackage ./nix/debug-keystore.nix { };
+        gen-debug-keystore = pkgs.callPackage ./nix/debug-keystore.nix { };
         align-apk = pkgs.callPackage ./nix/align-apk.nix { inherit build-tools; };
-        sign-apk = pkgs.callPackage ./nix/sign-apk.nix { inherit build-tools; };
+        sign-apk = pkgs.callPackage ./nix/sign-apk.nix { inherit build-tools gen-debug-keystore; };
         generate-manifest = pkgs.callPackage ./nix/generate-manifest.nix { };
         create-apk = pkgs.callPackage ./nix/create-apk.nix {
           inherit build-tools generate-manifest;
           inherit (android-nixpkgs.packages.${system}) platforms-android-30;
         };
+        debug-keystore = gen-debug-keystore {};
 
         env-vars-for =
           target:
@@ -106,7 +107,7 @@
             #"CXX_${target}" = "${bin-dir}/clang++";
           };
 
-        builds = (
+        libraries = (
           builtins.mapAttrs (
             name: target:
             crane-lib.buildPackage (
@@ -119,8 +120,6 @@
             )
           ) rust-targets
         );
-
-        libraries = (builtins.mapAttrs (name: value: "${value}") builds);
       in
       {
         devShells.default =
@@ -157,7 +156,7 @@
               CARGO_APK_DEV_KEYSTORE_PASSWORD = "android";
             };
           }
-          // builds
+          // libraries
         );
       }
     );

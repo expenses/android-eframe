@@ -1,12 +1,12 @@
 {
   runCommand,
   build-tools,
-  callPackage,
+  gen-debug-keystore,
 }:
 {
   apk,
   passwd ? "android",
-  debug-keystore ? callPackage ./debug-keystore.nix { inherit passwd; },
+  debug-keystore ? gen-debug-keystore { inherit passwd; },
 }:
 runCommand "signed-apk" { } ''
   cp ${apk} unsigned.apk
