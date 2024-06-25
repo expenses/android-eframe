@@ -139,6 +139,12 @@
 
             manifest = generate-manifest { inherit src; };
 
+            x86_64-apk = sign-apk { apk =
+              "${align-apk "${create-apk {
+                inherit src; libraries = {inherit (libraries) x86_64;};}
+              }/apk.apk"}/aligned.apk";
+            };
+
             apk-with-lib = create-apk { inherit src libraries; };
 
             aligned-apk = align-apk "${apk-with-lib}/apk.apk";
