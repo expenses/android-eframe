@@ -10,15 +10,11 @@ edition = "2021"
 publish = false
 
 [dependencies]
-egui = { git = "https://github.com/AndriBaal/egui", branch = "winit-0.30"}
-egui-winit = { git = "https://github.com/AndriBaal/egui", branch = "winit-0.30"}
+android_logger = "0.14.1"
+eframe = { git = "https://github.com/AndriBaal/egui", branch = "winit-0.30", features = ["android-native-activity"]}
 egui_demo_lib = { git = "https://github.com/AndriBaal/egui", branch = "winit-0.30"}
-egui_glow = { git = "https://github.com/AndriBaal/egui", branch = "winit-0.30", features = ["winit"]}
-glow = "0.13.1"
-glutin = { git = "https://github.com/rust-windowing/glutin", default-features = false }
-glutin-winit = { git = "https://github.com/rust-windowing/glutin" }
-raw-window-handle = "0.6"
-winit = { version = "0.30.0", default-features = false, features = ["rwh_06", "android-native-activity"] }
+log = "0.4.21"
+winit = "0.30.3"
 
 [lib]
 crate-type = ["cdylib"]
