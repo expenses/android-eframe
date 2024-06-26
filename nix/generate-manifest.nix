@@ -3,7 +3,8 @@
   src ? null,
   cargo-toml ? src + "/Cargo.toml",
   cargo-contents ? builtins.fromTOML (builtins.readFile cargo-toml),
-  name ? cargo-contents.package.name,
+  name ? builtins.replaceStrings ["-"] ["_"] cargo-contents.package.name,
+  version ? cargo-contents.package.version,
   package-name ? "rust.${name}",
   min-sdk-version ? "23",
   target-sdk-version ? "30",
@@ -13,7 +14,7 @@ writeTextDir "AndroidManifest.xml" ''
       xmlns:android="http://schemas.android.com/apk/res/android"
       package="${package-name}"
       android:versionCode="16777475"
-      android:versionName="0.1.3"
+      android:versionName="${version}"
   >
       <uses-sdk android:minSdkVersion="${min-sdk-version}" android:targetSdkVersion="${target-sdk-version}"/>
       <application android:debuggable="true" android:hasCode="false" android:label="${name}">

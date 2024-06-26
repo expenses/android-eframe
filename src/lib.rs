@@ -6,7 +6,7 @@ fn android_main(app: winit::platform::android::activity::AndroidApp) {
     android_logger::init_once(
         android_logger::Config::default()
             .with_max_level(log::LevelFilter::Trace)
-            .with_tag("glit"),
+            .with_tag(env!("CARGO_PKG_NAME")),
     );
 
     eframe::run_native(

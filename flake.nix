@@ -97,7 +97,7 @@
             bin-dir = "${ndk-bundle}/toolchains/llvm/prebuilt/linux-x86_64/bin";
           in
           {
-            "RUSTFLAGS" = "-Clink-arg=${link-arg}";
+            RUSTFLAGS = "-Clink-arg=${link-arg}";
             "CARGO_TARGET_${target-upper}_LINKER" = "${bin-dir}/clang";
             #"CARGO_TARGET_${target-upper}_ANDROID_AR" = "${bin-dir}/llvm-ar";
             #"AR_${target}" = "${bin-dir}/llvm-ar";
@@ -107,12 +107,14 @@
             #"CXX_${target}" = "${bin-dir}/clang++";
           };
 
+        vendor-deps = crane-lib.vendorCargoDeps { cargoLock = src + "/Cargo.lock";};
+
         libraries = (
           builtins.mapAttrs (
             name: target:
             crane-lib.buildPackage (
               {
-                inherit src;
+                inherit src vendor-deps;
                 CARGO_BUILD_TARGET = target;
                 doCheck = false;
               }
@@ -138,7 +140,7 @@
         packages = (
           rec {
 
-            inherit fake-libgcc-a;
+            inherit fake-libgcc-a vendor-deps;
 
             manifest = generate-manifest { inherit src; };
 
@@ -159,10 +161,13 @@
 
             signed-apk = sign-apk { apk = "${aligned-apk}/aligned.apk"; };
 
-            run = pkgs.writeShellScriptBin "run" ''
+            run = let
+              cargo-contents = builtins.fromTOML (builtins.readFile ./Cargo.toml);
+              inherit (cargo-contents.package) name;
+            in pkgs.writeShellScriptBin "run" ''
               adb install ${x86_64-apk}/signed.apk
-              adb shell am start -a android.intent.action.MAIN -n "rust.glit/android.app.NativeActivity"
-              adb logcat RustStdoutStderr:V glit:D '*:S'
+              adb shell am start -a android.intent.action.MAIN -n "rust.${name}/android.app.NativeActivity"
+              adb logcat RustStdoutStderr:V ${name}:D '*:S'
             '';
 
             cargo-apk-build = crane-lib.buildPackage {
